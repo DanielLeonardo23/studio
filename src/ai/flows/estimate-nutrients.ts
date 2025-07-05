@@ -41,14 +41,14 @@ const prompt = ai.definePrompt({
   name: 'estimateNutrientsPrompt',
   input: {schema: EstimateNutrientsInputSchema},
   output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `Esta es una imagen de un plato de comida.
+  prompt: `Esta es una imagen de un plato de comida. Es muy probable que sea un plato de la gastronomía peruana.
 Basándote en lo que ves, dime:\n
 1. Qué plato parece ser.\n2. Cuáles son sus valores nutricionales aproximados por 100g:\n   - Calorías
    - Proteínas
    - Grasas
    - Agua
 
-Hazlo en formato JSON. Si no estás seguro, haz una suposición razonable.\n
+Hazlo en formato JSON. Si no estás seguro, haz una suposición razonable. Da prioridad a platos peruanos si la imagen es ambigua.\n
 Aquí está la imagen: {{media url=photoDataUri}}`,
   config: {
     safetySettings: [
