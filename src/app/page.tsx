@@ -5,6 +5,7 @@ import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import {
   estimateNutrients,
+  estimateNutrientsFromText,
   type EstimateNutrientsOutput,
 } from '@/ai/flows/estimate-nutrients';
 import { Button } from '@/components/ui/button';
@@ -35,12 +36,14 @@ type FinalNutrients = {
 export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | null>(null);
+  const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [estimation, setEstimation] = useState<EstimateNutrientsOutput | null>(null);
   const [consumedGrams, setConsumedGrams] = useState('');
   const [finalNutrients, setFinalNutrients] = useState<FinalNutrients | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showResults, setShowResults] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -52,10 +55,11 @@ export default function Home() {
         const dataUri = reader.result as string;
         setImageDataUri(dataUri);
         setImagePreview(URL.createObjectURL(file));
+        setShowResults(true);
         submitEstimation(dataUri);
       };
       reader.readAsDataURL(file);
-    } else {
+    } else if (file) {
       toast({
         variant: 'destructive',
         title: 'Invalid File',
@@ -70,6 +74,7 @@ export default function Home() {
     setEstimation(null);
     setFinalNutrients(null);
     setConsumedGrams('');
+    setTextInput('');
 
     try {
       const result = await estimateNutrients({ photoDataUri: dataUri });
@@ -77,6 +82,42 @@ export default function Home() {
     } catch (e) {
       console.error(e);
       const errorMessage = 'Failed to estimate nutrients. The AI may not recognize this food. Please try another image.';
+      setError(errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Estimation Error',
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTextSubmit = async () => {
+    if (!textInput.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Input',
+        description: 'Please enter a dish name.',
+      });
+      return;
+    }
+
+    setShowResults(true);
+    setIsLoading(true);
+    setError(null);
+    setEstimation(null);
+    setFinalNutrients(null);
+    setConsumedGrams('');
+    setImagePreview(null);
+    setImageDataUri(null);
+
+    try {
+      const result = await estimateNutrientsFromText({ dishName: textInput });
+      setEstimation(result);
+    } catch (e) {
+      console.error(e);
+      const errorMessage = 'Failed to estimate nutrients. Please try another dish name.';
       setError(errorMessage);
       toast({
         variant: 'destructive',
@@ -107,6 +148,9 @@ export default function Home() {
     handleDragEvents(e);
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
+    if (file) {
+      setShowResults(true);
+    }
     handleFileChange(file);
   };
 
@@ -118,6 +162,8 @@ export default function Home() {
     setConsumedGrams('');
     setFinalNutrients(null);
     setError(null);
+    setTextInput('');
+    setShowResults(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -216,53 +262,83 @@ export default function Home() {
       </header>
 
       <main className="flex-grow container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
-        {!imagePreview ? (
+        {!showResults ? (
           <div
             className={cn(
-              'w-full max-w-2xl border-2 border-dashed rounded-xl transition-colors duration-200 text-center p-8 md:p-16 flex flex-col items-center justify-center cursor-pointer',
-              isDragging ? 'border-primary bg-accent' : 'border-border hover:border-primary/50'
+              'w-full max-w-2xl border-2 border-dashed rounded-xl transition-colors duration-200 text-center p-8 md:p-16 flex flex-col items-center justify-center',
+              isDragging ? 'border-primary bg-accent' : 'border-border'
             )}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragEvents}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
           >
-            <UploadCloud className="w-16 h-16 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Upload an Image</h2>
-            <p className="text-muted-foreground">Click to browse or drag and drop your food photo here.</p>
-            <Input
-              ref={fileInputRef}
-              id="file-upload"
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-            />
+            <div
+              className="w-full cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <UploadCloud className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
+              <h2 className="text-xl font-semibold mb-2">Upload an Image</h2>
+              <p className="text-muted-foreground">Click to browse or drag and drop.</p>
+              <Input
+                ref={fileInputRef}
+                id="file-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+              />
+            </div>
+
+            <div className="my-6 w-full flex items-center">
+              <Separator className="flex-1" />
+              <span className="px-4 text-sm text-muted-foreground uppercase">Or</span>
+              <Separator className="flex-1" />
+            </div>
+
+            <div className="w-full">
+              <Label htmlFor="dish-name-input" className="text-xl font-semibold mb-2 block">
+                Enter a Dish Name
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="dish-name-input"
+                  placeholder="e.g., Lomo Saltado"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && textInput && !isLoading) handleTextSubmit(); }}
+                />
+                <Button onClick={handleTextSubmit} disabled={!textInput || isLoading}>
+                  Estimate
+                </Button>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="w-full max-w-5xl">
             <Card className="overflow-hidden shadow-lg">
-              <div className="grid md:grid-cols-2">
-                <div className="relative aspect-square">
-                  <Image
-                    src={imagePreview}
-                    alt="Uploaded food"
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    className="object-cover transition-opacity duration-300"
-                    data-ai-hint="food dish"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 bg-background/50 hover:bg-background rounded-full"
-                    onClick={handleReset}
-                  >
-                    <X className="w-5 h-5" />
-                    <span className="sr-only">Clear image</span>
-                  </Button>
-                </div>
+              <div className={cn('grid', imagePreview ? 'md:grid-cols-2' : 'grid-cols-1')}>
+                {imagePreview && (
+                  <div className="relative aspect-square">
+                    <Image
+                      src={imagePreview}
+                      alt="Uploaded food"
+                      fill
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      className="object-cover transition-opacity duration-300"
+                      data-ai-hint="food dish"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 bg-background/50 hover:bg-background rounded-full"
+                      onClick={handleReset}
+                    >
+                      <X className="w-5 h-5" />
+                      <span className="sr-only">Clear image</span>
+                    </Button>
+                  </div>
+                )}
                 <div className="p-6 flex flex-col justify-center">
                   {isLoading && (
                     <div>
@@ -280,15 +356,28 @@ export default function Home() {
                   {error && !isLoading && (
                      <div className="text-center">
                       <p className="text-destructive font-semibold mb-4">{error}</p>
-                      <Button onClick={handleReset}>Try another image</Button>
+                      <Button onClick={handleReset}>Start over</Button>
                     </div>
                   )}
                   
                   {estimation && !isLoading && (
                     <div>
-                      <CardHeader className="p-0 mb-4">
-                        <CardTitle className="text-3xl font-headline">{estimation.alimento}</CardTitle>
-                        <CardDescription>Estimated nutrients per {estimation.porcion}</CardDescription>
+                      <CardHeader className="p-0 mb-4 flex flex-row justify-between items-start gap-4">
+                        <div>
+                          <CardTitle className="text-3xl font-headline">{estimation.alimento}</CardTitle>
+                          <CardDescription>Estimated nutrients per {estimation.porcion}</CardDescription>
+                        </div>
+                        {!imagePreview && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="flex-shrink-0"
+                            onClick={handleReset}
+                          >
+                            <X className="w-5 h-5" />
+                            <span className="sr-only">Clear results</span>
+                          </Button>
+                        )}
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
