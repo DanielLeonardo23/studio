@@ -22,7 +22,6 @@ import {
   Droplet,
   GlassWater,
   X,
-  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -249,9 +248,9 @@ export default function Home() {
                   <Image
                     src={imagePreview}
                     alt="Uploaded food"
-                    layout="fill"
-                    objectFit="cover"
-                    className="transition-opacity duration-300"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    className="object-cover transition-opacity duration-300"
                     data-ai-hint="food dish"
                   />
                   <Button
