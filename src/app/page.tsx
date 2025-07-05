@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import {
@@ -26,8 +26,11 @@ import {
   GlassWater,
   X,
   ScanText,
+  Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type FinalNutrients = {
   calorias: number;
@@ -47,6 +50,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
 
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [activeAnalysisType, setActiveAnalysisType] = useState<'dish' | 'label' | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
   const handleFileChange = (file: File | null, analysisType: 'dish' | 'label') => {
@@ -168,6 +177,70 @@ export default function Home() {
     });
   };
 
+  const openCamera = (analysisType: 'dish' | 'label') => {
+    setActiveAnalysisType(analysisType);
+    setHasCameraPermission(null);
+    setIsCameraOpen(true);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current && activeAnalysisType) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+      
+      const dataUri = canvas.toDataURL('image/png');
+      setImageDataUri(dataUri);
+      setImagePreview(dataUri);
+      setShowResults(true);
+      submitImageEstimation(activeAnalysisType, dataUri);
+
+      setIsCameraOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isCameraOpen) {
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
+      return;
+    }
+
+    let stream: MediaStream | null = null;
+    const getCameraPermission = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions to take a photo.',
+        });
+        setIsCameraOpen(false);
+      }
+    };
+
+    getCameraPermission();
+
+    return () => {
+        stream?.getTracks().forEach(track => track.stop());
+        if (videoRef.current?.srcObject) {
+             videoRef.current.srcObject = null;
+        }
+    };
+  }, [isCameraOpen, toast]);
+
   const nutrientItems = useMemo(() => {
     if (!estimation) return [];
     return [
@@ -188,35 +261,26 @@ export default function Home() {
     ];
   }, [finalNutrients]);
 
-  const ImageUploader = ({
-    analysisType,
-    title,
-    description,
-    icon: Icon,
-  }: {
-    analysisType: 'dish' | 'label';
-    title: string;
-    description: string;
-    icon: React.ElementType;
-  }) => {
+  const ImageUploader = ({ analysisType }: { analysisType: 'dish' | 'label' }) => {
     const uploaderFileInputRef = useRef<HTMLInputElement>(null);
     const [isUploaderDragging, setIsUploaderDragging] = useState(false);
+
+    const title = analysisType === 'dish' ? 'Analyze a Dish Photo' : 'Analyze a Nutrition Label';
+    const description = 'Take a photo or upload an image to start.';
+    const Icon = analysisType === 'dish' ? UploadCloud : ScanText;
 
     const handleUploaderDragEvents = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
     };
-
     const handleUploaderDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
       handleUploaderDragEvents(e);
       setIsUploaderDragging(true);
     };
-
     const handleUploaderDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
       handleUploaderDragEvents(e);
       setIsUploaderDragging(false);
     };
-
     const handleUploaderDrop = (e: React.DragEvent<HTMLDivElement>) => {
       handleUploaderDragEvents(e);
       setIsUploaderDragging(false);
@@ -237,21 +301,25 @@ export default function Home() {
         onDragOver={handleUploaderDragEvents}
         onDrop={handleUploaderDrop}
       >
-        <div
-          className="w-full cursor-pointer"
-          onClick={() => uploaderFileInputRef.current?.click()}
-        >
-          <Icon className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
-          <h2 className="text-xl font-semibold mb-2">{title}</h2>
-          <p className="text-muted-foreground">{description}</p>
-          <Input
-            ref={uploaderFileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => handleFileChange(e.target.files?.[0] || null, analysisType)}
-          />
+        <Icon className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
+        <h2 className="text-xl font-semibold mb-2">{title}</h2>
+        <p className="text-muted-foreground mb-6">{description}</p>
+        <div className="flex flex-col sm:flex-row gap-4">
+            <Button onClick={() => uploaderFileInputRef.current?.click()} size="lg">
+                <UploadCloud className="mr-2" /> Upload Image
+            </Button>
+            <Button onClick={() => openCamera(analysisType)} size="lg">
+                <Camera className="mr-2" /> Take Photo
+            </Button>
         </div>
+        <p className="text-sm text-muted-foreground mt-4">or drag and drop an image</p>
+        <Input
+          ref={uploaderFileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFileChange(e.target.files?.[0] || null, analysisType)}
+        />
       </div>
     );
   };
@@ -295,20 +363,10 @@ export default function Home() {
                 <TabsTrigger value="text">From Text</TabsTrigger>
               </TabsList>
               <TabsContent value="photo">
-                <ImageUploader
-                  analysisType="dish"
-                  title="Upload Dish Photo"
-                  description="Click to browse or drag and drop an image of a food dish."
-                  icon={UploadCloud}
-                />
+                <ImageUploader analysisType="dish" />
               </TabsContent>
               <TabsContent value="label">
-                <ImageUploader
-                  analysisType="label"
-                  title="Upload Label Photo"
-                  description="Click to browse or drag and drop an image of a nutrition label."
-                  icon={ScanText}
-                />
+                <ImageUploader analysisType="label" />
               </TabsContent>
               <TabsContent value="text">
                 <div className="w-full border-2 border-dashed rounded-b-xl border-input text-center p-8 flex flex-col items-center justify-center">
@@ -437,6 +495,37 @@ export default function Home() {
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
         <p>Powered by Google AI. For informational purposes only.</p>
       </footer>
+
+      <canvas ref={canvasRef} className="hidden" />
+      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+        <DialogContent className="max-w-md p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Take a Photo</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-full bg-muted rounded-lg overflow-hidden relative aspect-video">
+              <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+               {hasCameraPermission !== true && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+                    {hasCameraPermission === false ? (
+                        <Alert variant="destructive" className="mx-4">
+                            <AlertTitle>Camera Access Denied</AlertTitle>
+                            <AlertDescription>
+                                Enable permissions and try again.
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <p className="text-muted-foreground">Requesting camera access...</p>
+                    )}
+                  </div>
+              )}
+            </div>
+            <Button onClick={capturePhoto} className="w-full" size="lg" disabled={!hasCameraPermission}>
+              <Camera className="mr-2" /> Capture Photo
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
