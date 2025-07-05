@@ -1,4 +1,3 @@
-// estimate-nutrients.ts
 'use server';
 /**
  * @fileOverview Estimates the nutritional content of a food item from an image or text.
@@ -12,6 +11,10 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {
+  EstimateNutrientsOutput,
+  EstimateNutrientsOutputSchema,
+} from './schemas';
 
 const EstimateNutrientsInputSchema = z.object({
   photoDataUri: z
@@ -20,30 +23,28 @@ const EstimateNutrientsInputSchema = z.object({
       "A photo of a food item, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
 });
-export type EstimateNutrientsInput = z.infer<typeof EstimateNutrientsInputSchema>;
+export type EstimateNutrientsInput = z.infer<
+  typeof EstimateNutrientsInputSchema
+>;
 
 const EstimateNutrientsFromTextInputSchema = z.object({
   dishName: z.string().describe('The name of the food dish.'),
 });
-export type EstimateNutrientsFromTextInput = z.infer<typeof EstimateNutrientsFromTextInputSchema>;
+export type EstimateNutrientsFromTextInput = z.infer<
+  typeof EstimateNutrientsFromTextInputSchema
+>;
 
-const EstimateNutrientsOutputSchema = z.object({
-  alimento: z.string().describe('The name of the food item.'),
-  porcion: z.string().describe('The standard portion size (e.g., "100g").'),
-  nutrientes: z.object({
-    calorias: z.number().describe('The estimated calories per portion.'),
-    proteinas: z.number().describe('The estimated protein content in grams per portion.'),
-    grasas: z.number().describe('The estimated fat content in grams per portion.'),
-    agua: z.number().describe('The estimated water content in grams per portion.'),
-  }).describe('Nutritional information per standard portion.'),
-});
-export type EstimateNutrientsOutput = z.infer<typeof EstimateNutrientsOutputSchema>;
+export type {EstimateNutrientsOutput};
 
-export async function estimateNutrients(input: EstimateNutrientsInput): Promise<EstimateNutrientsOutput> {
+export async function estimateNutrients(
+  input: EstimateNutrientsInput
+): Promise<EstimateNutrientsOutput> {
   return estimateNutrientsFlow(input);
 }
 
-export async function estimateNutrientsFromText(input: EstimateNutrientsFromTextInput): Promise<EstimateNutrientsOutput> {
+export async function estimateNutrientsFromText(
+  input: EstimateNutrientsFromTextInput
+): Promise<EstimateNutrientsOutput> {
   return estimateNutrientsFromTextFlow(input);
 }
 
@@ -93,7 +94,6 @@ const estimateNutrientsFlow = ai.defineFlow(
     return output!;
   }
 );
-
 
 const textPrompt = ai.definePrompt({
   name: 'estimateNutrientsFromTextPrompt',
