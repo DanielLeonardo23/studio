@@ -1,10 +1,13 @@
 'use server';
 /**
  * @fileOverview Extracts nutritional information from an image of a food label.
+ * This flow uses a two-step process:
+ * 1. It uses the Google Cloud Vision API to perform OCR and extract text from the image.
+ * 2. It sends the extracted text to the Gemini model to parse the nutritional information.
  *
  * - extractNutrientsFromLabel - A function that handles the nutrient extraction process from a label image.
  * - ExtractNutrientsFromLabelInput - The input type for the function.
- * - EstimateNutrientsOutput - The return type for the function (reusing from estimate-nutrients).
+ * - EstimateNutrientsOutput - The return type for the function (reusing from schemas).
  */
 
 import {ai} from '@/ai/genkit';
@@ -13,6 +16,10 @@ import {
   EstimateNutrientsOutput,
   EstimateNutrientsOutputSchema,
 } from './schemas';
+import {ImageAnnotatorClient} from '@google-cloud/vision';
+
+// This client will use Application Default Credentials to authenticate.
+const visionClient = new ImageAnnotatorClient();
 
 const ExtractNutrientsFromLabelInputSchema = z.object({
   photoDataUri: z
@@ -34,13 +41,18 @@ export async function extractNutrientsFromLabel(
   return extractNutrientsFromLabelFlow(input);
 }
 
+// Define an internal schema for the text-based prompt that will be sent to Gemini.
+const LabelTextPromptInputSchema = z.object({
+  labelText: z.string().describe("The text extracted from a nutrition label via OCR."),
+});
+
 const labelPrompt = ai.definePrompt({
-  name: 'extractNutrientsFromLabelPrompt',
-  input: {schema: ExtractNutrientsFromLabelInputSchema},
+  name: 'extractNutrientsFromLabelTextPrompt',
+  input: {schema: LabelTextPromptInputSchema},
   output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `You are an expert at reading nutritional labels from images using OCR.
-Analyze the provided image of a nutritional label.
-Extract the following information:
+  prompt: `You are an expert at reading nutritional information.
+Analyze the provided text extracted from a nutritional label.
+From this text, extract the following information:
 1.  The name of the food item ('alimento').
 2.  The serving size as a string, e.g., "100g" or "1 package" ('porcion').
 3.  The nutritional values per serving size:
@@ -50,7 +62,10 @@ Extract the following information:
     - Water content in grams ('agua'). If water is not listed, estimate it based on the other ingredients or set it to 0.
 
 Provide the response in the requested JSON format. If you cannot find a value, make a reasonable estimate. Prioritize the values from the 'per 100g' column if available.
-Here is the image: {{media url=photoDataUri}}`,
+Here is the extracted text:
+---
+{{{labelText}}}
+---`,
   config: {
     safetySettings: [
       {
@@ -79,8 +94,23 @@ const extractNutrientsFromLabelFlow = ai.defineFlow(
     inputSchema: ExtractNutrientsFromLabelInputSchema,
     outputSchema: EstimateNutrientsOutputSchema,
   },
-  async input => {
-    const {output} = await labelPrompt(input);
+  async (input) => {
+    // 1. Extract text from the image using the Cloud Vision API
+    const imageBuffer = Buffer.from(input.photoDataUri.split(';base64,').pop()!, 'base64');
+    const [result] = await visionClient.textDetection({ image: { content: imageBuffer } });
+    const detections = result.textAnnotations;
+    
+    let extractedText = "";
+    if (detections && detections.length > 0 && detections[0]?.description) {
+      extractedText = detections[0].description;
+    }
+
+    if (!extractedText.trim()) {
+        throw new Error("Could not extract any text from the provided image. Please try a clearer picture.");
+    }
+
+    // 2. Call Gemini with the extracted text to parse it.
+    const {output} = await labelPrompt({ labelText: extractedText });
     return output!;
   }
 );
