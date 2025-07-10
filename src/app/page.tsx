@@ -41,7 +41,6 @@ type FinalNutrients = {
 
 export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageDataUri, setImageDataUri] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [estimation, setEstimation] = useState<EstimateNutrientsOutput | null>(null);
@@ -60,15 +59,9 @@ export default function Home() {
 
   const handleFileChange = (file: File | null, analysisType: 'dish' | 'label') => {
     if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUri = reader.result as string;
-        setImageDataUri(dataUri);
         setImagePreview(URL.createObjectURL(file));
         setShowResults(true);
-        submitImageEstimation(analysisType, dataUri);
-      };
-      reader.readAsDataURL(file);
+        submitImageEstimation(analysisType, file);
     } else if (file) {
       toast({
         variant: 'destructive',
@@ -78,7 +71,7 @@ export default function Home() {
     }
   };
 
-  const submitImageEstimation = async (analysisType: 'dish' | 'label', dataUri: string) => {
+  const submitImageEstimation = async (analysisType: 'dish' | 'label', file: File) => {
     setIsLoading(true);
     setError(null);
     setEstimation(null);
@@ -86,15 +79,27 @@ export default function Home() {
     setConsumedGrams('');
     setTextInput('');
 
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    const endpoint = analysisType === 'dish' ? '/api/estimate/dish' : '/api/extract/label';
+
     try {
-      const result =
-        analysisType === 'dish'
-          ? await estimateNutrients({ photoDataUri: dataUri })
-          : await extractNutrientsFromLabel({ photoDataUri: dataUri });
-      setEstimation(result);
-    } catch (e) {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Request failed');
+        }
+
+        const result: EstimateNutrientsOutput = await response.json();
+        setEstimation(result);
+    } catch (e: any) {
       console.error(e);
-      const errorMessage = 'Failed to estimate nutrients. The AI may not recognize this. Please try again.';
+      const errorMessage = e.message || 'Failed to estimate nutrients. The AI may not recognize this. Please try again.';
       setError(errorMessage);
       toast({
         variant: 'destructive',
@@ -123,14 +128,25 @@ export default function Home() {
     setFinalNutrients(null);
     setConsumedGrams('');
     setImagePreview(null);
-    setImageDataUri(null);
-
+    
     try {
-      const result = await estimateNutrientsFromText({ dishName: textInput });
+      const response = await fetch('/api/estimate/text', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ dishName: textInput }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Request failed');
+      }
+
+      const result = await response.json();
       setEstimation(result);
-    } catch (e) {
+
+    } catch (e: any) {
       console.error(e);
-      const errorMessage = 'Failed to estimate nutrients. Please try another dish name.';
+      const errorMessage = e.message || 'Failed to estimate nutrients. Please try another dish name.';
       setError(errorMessage);
       toast({
         variant: 'destructive',
@@ -144,7 +160,6 @@ export default function Home() {
 
   const handleReset = () => {
     setImagePreview(null);
-    setImageDataUri(null);
     setIsLoading(false);
     setEstimation(null);
     setConsumedGrams('');
@@ -166,7 +181,7 @@ export default function Home() {
       return;
     }
 
-    const basePortion = parseInt(estimation.porcion.replace(/[^0-9]/g, ''), 10) || 100;
+    const basePortion = parseInt(String(estimation.porcion).replace(/[^0-9]/g, ''), 10) || 100;
     const multiplier = grams / basePortion;
 
     setFinalNutrients({
@@ -183,7 +198,7 @@ export default function Home() {
     setIsCameraOpen(true);
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current && activeAnalysisType) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -193,11 +208,13 @@ export default function Home() {
       canvas.height = video.videoHeight;
       context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
       
-      const dataUri = canvas.toDataURL('image/png');
-      setImageDataUri(dataUri);
-      setImagePreview(dataUri);
-      setShowResults(true);
-      submitImageEstimation(activeAnalysisType, dataUri);
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (blob) {
+        const file = new File([blob], "camera-capture.png", { type: "image/png"});
+        setImagePreview(URL.createObjectURL(file));
+        setShowResults(true);
+        submitImageEstimation(activeAnalysisType, file);
+      }
 
       setIsCameraOpen(false);
     }
