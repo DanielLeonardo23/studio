@@ -6,9 +6,13 @@ import Image from 'next/image';
 import {
   estimateNutrients,
   estimateNutrientsFromText,
-  type EstimateNutrientsOutput,
+  type EstimateDishOutput,
 } from '@/ai/flows/estimate-nutrients';
-import { extractNutrientsFromLabel } from '@/ai/flows/extract-nutrients-from-label';
+import { 
+  extractNutrientsFromLabel, 
+  type EstimateNutrientsOutput 
+} from '@/ai/flows/extract-nutrients-from-label';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,6 +36,17 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
+type UnifiedEstimation = {
+  name: string;
+  portion: string;
+  nutrients: {
+    calories: number;
+    protein: number;
+    fats: number;
+    water: number;
+  };
+};
+
 type FinalNutrients = {
   calorias: number;
   proteinas: number;
@@ -43,7 +58,7 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [estimation, setEstimation] = useState<EstimateNutrientsOutput | null>(null);
+  const [estimation, setEstimation] = useState<UnifiedEstimation | null>(null);
   const [consumedGrams, setConsumedGrams] = useState('');
   const [finalNutrients, setFinalNutrients] = useState<FinalNutrients | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +86,35 @@ export default function Home() {
     }
   };
 
+  const normalizeEstimation = (result: EstimateDishOutput | EstimateNutrientsOutput): UnifiedEstimation => {
+    // Check if it's a dish estimation (EstimateDishOutput)
+    if ('energy' in result) {
+      return {
+        name: result.name,
+        portion: '100g', // Dish estimations are always per 100g
+        nutrients: {
+          calories: result.energy,
+          protein: result.protein,
+          fats: result.fats,
+          water: result.water,
+        },
+      };
+    } 
+    // Otherwise, it's a label estimation (EstimateNutrientsOutput)
+    else {
+      return {
+        name: result.alimento,
+        portion: result.porcion,
+        nutrients: {
+          calories: result.nutrientes.calorias,
+          protein: result.nutrientes.proteinas,
+          fats: result.nutrientes.grasas,
+          water: result.nutrientes.agua,
+        },
+      };
+    }
+  };
+
   const submitImageEstimation = async (analysisType: 'dish' | 'label', file: File) => {
     setIsLoading(true);
     setError(null);
@@ -95,8 +139,9 @@ export default function Home() {
             throw new Error(errorData.error || 'Request failed');
         }
 
-        const result: EstimateNutrientsOutput = await response.json();
-        setEstimation(result);
+        const result: EstimateDishOutput | EstimateNutrientsOutput = await response.json();
+        setEstimation(normalizeEstimation(result));
+
     } catch (e: any) {
       console.error(e);
       const errorMessage = e.message || 'Failed to estimate nutrients. The AI may not recognize this. Please try again.';
@@ -141,8 +186,8 @@ export default function Home() {
         throw new Error(errorData.error || 'Request failed');
       }
 
-      const result = await response.json();
-      setEstimation(result);
+      const result: EstimateDishOutput = await response.json();
+      setEstimation(normalizeEstimation(result));
 
     } catch (e: any) {
       console.error(e);
@@ -181,14 +226,14 @@ export default function Home() {
       return;
     }
 
-    const basePortion = parseInt(String(estimation.porcion).replace(/[^0-9]/g, ''), 10) || 100;
+    const basePortion = parseInt(String(estimation.portion).replace(/[^0-9]/g, ''), 10) || 100;
     const multiplier = grams / basePortion;
 
     setFinalNutrients({
-      calorias: estimation.nutrientes.calorias * multiplier,
-      proteinas: estimation.nutrientes.proteinas * multiplier,
-      grasas: estimation.nutrientes.grasas * multiplier,
-      agua: estimation.nutrientes.agua * multiplier,
+      calorias: estimation.nutrients.calories * multiplier,
+      proteinas: estimation.nutrients.protein * multiplier,
+      grasas: estimation.nutrients.fats * multiplier,
+      agua: estimation.nutrients.water * multiplier,
     });
   };
 
@@ -261,10 +306,10 @@ export default function Home() {
   const nutrientItems = useMemo(() => {
     if (!estimation) return [];
     return [
-      { icon: Flame, name: 'Calories', value: estimation.nutrientes.calorias, unit: 'kcal' },
-      { icon: Beef, name: 'Protein', value: estimation.nutrientes.proteinas, unit: 'g' },
-      { icon: Droplet, name: 'Fats', value: estimation.nutrientes.grasas, unit: 'g' },
-      { icon: GlassWater, name: 'Water', value: estimation.nutrientes.agua, unit: 'g' },
+      { icon: Flame, name: 'Calories', value: estimation.nutrients.calories, unit: 'kcal' },
+      { icon: Beef, name: 'Protein', value: estimation.nutrients.protein, unit: 'g' },
+      { icon: Droplet, name: 'Fats', value: estimation.nutrients.fats, unit: 'g' },
+      { icon: GlassWater, name: 'Water', value: estimation.nutrients.water, unit: 'g' },
     ];
   }, [estimation]);
 
@@ -456,8 +501,8 @@ export default function Home() {
                     <div>
                       <CardHeader className="p-0 mb-4 flex flex-row justify-between items-start gap-4">
                         <div>
-                          <CardTitle className="text-3xl font-headline">{estimation.alimento}</CardTitle>
-                          <CardDescription>Estimated nutrients per {estimation.porcion}</CardDescription>
+                          <CardTitle className="text-3xl font-headline">{estimation.name}</CardTitle>
+                          <CardDescription>Estimated nutrients per {estimation.portion}</CardDescription>
                         </div>
                         <Button
                           variant="ghost"

@@ -6,14 +6,14 @@
  * - estimateNutrientsFromText - A function that handles the nutrient estimation process from text.
  * - EstimateNutrientsInput - The input type for the estimateNutrients function.
  * - EstimateNutrientsFromTextInput - The input type for the estimateNutrientsFromText function.
- * - EstimateNutrientsOutput - The return type for the estimation functions.
+ * - EstimateDishOutput - The return type for the estimation functions.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {
-  EstimateNutrientsOutput,
-  EstimateNutrientsOutputSchema,
+  EstimateDishOutput,
+  EstimateDishOutputSchema,
 } from './schemas';
 
 const EstimateNutrientsInputSchema = z.object({
@@ -34,33 +34,35 @@ export type EstimateNutrientsFromTextInput = z.infer<
   typeof EstimateNutrientsFromTextInputSchema
 >;
 
-export type {EstimateNutrientsOutput};
+export type {EstimateDishOutput};
 
 export async function estimateNutrients(
   input: EstimateNutrientsInput
-): Promise<EstimateNutrientsOutput> {
+): Promise<EstimateDishOutput> {
   return estimateNutrientsFlow(input);
 }
 
 export async function estimateNutrientsFromText(
   input: EstimateNutrientsFromTextInput
-): Promise<EstimateNutrientsOutput> {
+): Promise<EstimateDishOutput> {
   return estimateNutrientsFromTextFlow(input);
 }
 
 const imagePrompt = ai.definePrompt({
-  name: 'estimateNutrientsPrompt',
+  name: 'estimateDishPrompt',
   input: {schema: EstimateNutrientsInputSchema},
-  output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `Esta es una imagen de un plato de comida. Es muy probable que sea un plato de la gastronomía peruana.
-Basándote en lo que ves, dime:\n
-1. Qué plato parece ser.\n2. Cuáles son sus valores nutricionales aproximados por 100g:\n   - Calorías
-   - Proteínas
-   - Grasas
-   - Agua
+  output: {schema: EstimateDishOutputSchema},
+  prompt: `Analyze the image of a food dish provided. It is likely a dish from Peruvian cuisine.
+Based on what you see, provide the following information in JSON format:
+1.  **name**: What the dish appears to be.
+2.  The approximate nutritional values per 100g, with these specific keys:
+    - **energy**: Calories (in kcal)
+    - **protein**: Protein (in g)
+    - **fats**: Fats (in g)
+    - **water**: Water (in g)
 
-Hazlo en formato JSON. Si no estás seguro, haz una suposición razonable. Da prioridad a platos peruanos si la imagen es ambigua.\n
-Aquí está la imagen: {{media url=photoDataUri}}`,
+If you are unsure, make a reasonable guess. Prioritize Peruvian dishes if the image is ambiguous.
+Here is the image: {{media url=photoDataUri}}`,
   config: {
     safetySettings: [
       {
@@ -87,7 +89,7 @@ const estimateNutrientsFlow = ai.defineFlow(
   {
     name: 'estimateNutrientsFlow',
     inputSchema: EstimateNutrientsInputSchema,
-    outputSchema: EstimateNutrientsOutputSchema,
+    outputSchema: EstimateDishOutputSchema,
   },
   async input => {
     const {output} = await imagePrompt(input);
@@ -96,17 +98,19 @@ const estimateNutrientsFlow = ai.defineFlow(
 );
 
 const textPrompt = ai.definePrompt({
-  name: 'estimateNutrientsFromTextPrompt',
+  name: 'estimateDishFromTextPrompt',
   input: {schema: EstimateNutrientsFromTextInputSchema},
-  output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `El siguiente es el nombre de un plato de comida: {{{dishName}}}. Es muy probable que sea un plato de la gastronomía peruana.
-Basándote en el nombre del plato, dime:\n
-1. Confirma el nombre del plato.\n2. Cuáles son sus valores nutricionales aproximados por 100g:\n   - Calorías
-   - Proteínas
-   - Grasas
-   - Agua
+  output: {schema: EstimateDishOutputSchema},
+  prompt: `The following is the name of a food dish: {{{dishName}}}. It is very likely a dish from Peruvian cuisine.
+Based on the dish name, provide the following information in JSON format:
+1.  **name**: Confirm the name of the dish.
+2.  The approximate nutritional values per 100g, with these specific keys:
+    - **energy**: Calories (in kcal)
+    - **protein**: Protein (in g)
+    - **fats**: Fats (in g)
+    - **water**: Water (in g)
 
-Hazlo en formato JSON. Si no estás seguro, haz una suposición razonable. Da prioridad a platos peruanos si el nombre es ambiguo. Asegurate que 'alimento' en tu respuesta sea el nombre del plato que te di.`,
+If you are unsure, make a reasonable guess. Prioritize Peruvian dishes if the name is ambiguous. Ensure the 'name' in your response is the dish name I provided.`,
   config: {
     safetySettings: [
       {
@@ -133,7 +137,7 @@ const estimateNutrientsFromTextFlow = ai.defineFlow(
   {
     name: 'estimateNutrientsFromTextFlow',
     inputSchema: EstimateNutrientsFromTextInputSchema,
-    outputSchema: EstimateNutrientsOutputSchema,
+    outputSchema: EstimateDishOutputSchema,
   },
   async input => {
     const {output} = await textPrompt(input);
