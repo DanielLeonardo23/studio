@@ -18,9 +18,6 @@ import {
 } from './schemas';
 import {ImageAnnotatorClient} from '@google-cloud/vision';
 
-// This client will use Application Default Credentials to authenticate.
-const visionClient = new ImageAnnotatorClient();
-
 const ExtractNutrientsFromLabelInputSchema = z.object({
   photoDataUri: z
     .string()
@@ -50,18 +47,20 @@ const labelPrompt = ai.definePrompt({
   name: 'extractNutrientsFromLabelTextPrompt',
   input: {schema: LabelTextPromptInputSchema},
   output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `You are an expert at reading nutritional information.
-Analyze the provided text extracted from a nutritional label.
-From this text, extract the following information:
-1.  The name of the food item ('alimento').
-2.  The serving size as a string, e.g., "100g" or "1 package" ('porcion').
-3.  The nutritional values per serving size:
-    - Calories ('calorias')
-    - Protein in grams ('proteinas')
-    - Total Fats in grams ('grasas')
-    - Water content in grams ('agua'). If water is not listed, estimate it based on the other ingredients or set it to 0.
+  prompt: `You are an expert at reading nutritional information from OCR text.
+Analyze the provided text extracted from a nutritional label and identify the main product name.
+From this text, extract the following information based on a 100g or 100ml serving size. If only a different serving size is available, use it as the 'porcion' but calculate the nutrient values for 100g/ml.
 
-Provide the response in the requested JSON format. If you cannot find a value, make a reasonable estimate. Prioritize the values from the 'per 100g' column if available.
+1.  **alimento**: The name of the food item (e.g., "Leche Gloria Entera").
+2.  **porcion**: The standard portion size, normalized to "100g" or "100ml".
+3.  **nutrientes**:
+    - **calorias**: The estimated calories.
+    - **proteinas**: The estimated protein content in grams.
+    - **grasas**: The estimated total fat content in grams.
+    - **agua**: The estimated water content in grams. If water is not listed, estimate it based on the other ingredients or assume it is the remainder to reach 100g (e.g., 100 - proteinas - grasas - carbohidratos). Set to 0 if not estimable.
+
+Provide the response in the requested JSON format. If you cannot find a specific value, make a reasonable estimate. Prioritize the values from a "por 100g" or "por 100ml" column if available.
+
 Here is the extracted text:
 ---
 {{{labelText}}}
@@ -95,6 +94,9 @@ const extractNutrientsFromLabelFlow = ai.defineFlow(
     outputSchema: EstimateNutrientsOutputSchema,
   },
   async (input) => {
+    // This is the correct way to initialize the client within the flow
+    const visionClient = new ImageAnnotatorClient();
+    
     // 1. Extract text from the image using the Cloud Vision API
     const imageBuffer = Buffer.from(input.photoDataUri.split(';base64,').pop()!, 'base64');
     const [result] = await visionClient.textDetection({ image: { content: imageBuffer } });
