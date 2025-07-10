@@ -6,11 +6,10 @@ import Image from 'next/image';
 import {
   estimateNutrients,
   estimateNutrientsFromText,
-  type EstimateDishOutput,
+  type UnifiedNutritionOutput,
 } from '@/ai/flows/estimate-nutrients';
 import { 
   extractNutrientsFromLabel, 
-  type EstimateNutrientsOutput 
 } from '@/ai/flows/extract-nutrients-from-label';
 
 import { Button } from '@/components/ui/button';
@@ -36,29 +35,18 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-type UnifiedEstimation = {
-  name: string;
-  portion: string;
-  nutrients: {
-    calories: number;
-    protein: number;
-    fats: number;
-    water: number;
-  };
-};
-
 type FinalNutrients = {
-  calorias: number;
-  proteinas: number;
-  grasas: number;
-  agua: number;
+  energy: number;
+  protein: number;
+  fats: number;
+  water: number;
 };
 
 export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [estimation, setEstimation] = useState<UnifiedEstimation | null>(null);
+  const [estimation, setEstimation] = useState<UnifiedNutritionOutput | null>(null);
   const [consumedGrams, setConsumedGrams] = useState('');
   const [finalNutrients, setFinalNutrients] = useState<FinalNutrients | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,35 +74,6 @@ export default function Home() {
     }
   };
 
-  const normalizeEstimation = (result: EstimateDishOutput | EstimateNutrientsOutput): UnifiedEstimation => {
-    // Check if it's a dish estimation (EstimateDishOutput)
-    if ('energy' in result) {
-      return {
-        name: result.name,
-        portion: '100g', // Dish estimations are always per 100g
-        nutrients: {
-          calories: result.energy,
-          protein: result.protein,
-          fats: result.fats,
-          water: result.water,
-        },
-      };
-    } 
-    // Otherwise, it's a label estimation (EstimateNutrientsOutput)
-    else {
-      return {
-        name: result.alimento,
-        portion: result.porcion,
-        nutrients: {
-          calories: result.nutrientes.calorias,
-          protein: result.nutrientes.proteinas,
-          fats: result.nutrientes.grasas,
-          water: result.nutrientes.agua,
-        },
-      };
-    }
-  };
-
   const submitImageEstimation = async (analysisType: 'dish' | 'label', file: File) => {
     setIsLoading(true);
     setError(null);
@@ -139,8 +98,8 @@ export default function Home() {
             throw new Error(errorData.error || 'Request failed');
         }
 
-        const result: EstimateDishOutput | EstimateNutrientsOutput = await response.json();
-        setEstimation(normalizeEstimation(result));
+        const result: UnifiedNutritionOutput = await response.json();
+        setEstimation(result);
 
     } catch (e: any) {
       console.error(e);
@@ -186,8 +145,8 @@ export default function Home() {
         throw new Error(errorData.error || 'Request failed');
       }
 
-      const result: EstimateDishOutput = await response.json();
-      setEstimation(normalizeEstimation(result));
+      const result: UnifiedNutritionOutput = await response.json();
+      setEstimation(result);
 
     } catch (e: any) {
       console.error(e);
@@ -226,14 +185,15 @@ export default function Home() {
       return;
     }
 
-    const basePortion = parseInt(String(estimation.portion).replace(/[^0-9]/g, ''), 10) || 100;
+    // Use the provided portion if available (from a label), otherwise default to 100g.
+    const basePortion = parseInt(String(estimation.portion || '100').replace(/[^0-9]/g, ''), 10) || 100;
     const multiplier = grams / basePortion;
 
     setFinalNutrients({
-      calorias: estimation.nutrients.calories * multiplier,
-      proteinas: estimation.nutrients.protein * multiplier,
-      grasas: estimation.nutrients.fats * multiplier,
-      agua: estimation.nutrients.water * multiplier,
+      energy: estimation.energy * multiplier,
+      protein: estimation.protein * multiplier,
+      fats: estimation.fats * multiplier,
+      water: estimation.water * multiplier,
     });
   };
 
@@ -306,20 +266,20 @@ export default function Home() {
   const nutrientItems = useMemo(() => {
     if (!estimation) return [];
     return [
-      { icon: Flame, name: 'Calories', value: estimation.nutrients.calories, unit: 'kcal' },
-      { icon: Beef, name: 'Protein', value: estimation.nutrients.protein, unit: 'g' },
-      { icon: Droplet, name: 'Fats', value: estimation.nutrients.fats, unit: 'g' },
-      { icon: GlassWater, name: 'Water', value: estimation.nutrients.water, unit: 'g' },
+      { icon: Flame, name: 'Calories', value: estimation.energy, unit: 'kcal' },
+      { icon: Beef, name: 'Protein', value: estimation.protein, unit: 'g' },
+      { icon: Droplet, name: 'Fats', value: estimation.fats, unit: 'g' },
+      { icon: GlassWater, name: 'Water', value: estimation.water, unit: 'g' },
     ];
   }, [estimation]);
 
   const finalNutrientItems = useMemo(() => {
     if (!finalNutrients) return [];
     return [
-      { icon: Flame, name: 'Calories', value: finalNutrients.calorias, unit: 'kcal' },
-      { icon: Beef, name: 'Protein', value: finalNutrients.proteinas, unit: 'g' },
-      { icon: Droplet, name: 'Fats', value: finalNutrients.grasas, unit: 'g' },
-      { icon: GlassWater, name: 'Water', value: finalNutrients.agua, unit: 'g' },
+      { icon: Flame, name: 'Calories', value: finalNutrients.energy, unit: 'kcal' },
+      { icon: Beef, name: 'Protein', value: finalNutrients.protein, unit: 'g' },
+      { icon: Droplet, name: 'Fats', value: finalNutrients.fats, unit: 'g' },
+      { icon: GlassWater, name: 'Water', value: finalNutrients.water, unit: 'g' },
     ];
   }, [finalNutrients]);
 
@@ -502,7 +462,7 @@ export default function Home() {
                       <CardHeader className="p-0 mb-4 flex flex-row justify-between items-start gap-4">
                         <div>
                           <CardTitle className="text-3xl font-headline">{estimation.name}</CardTitle>
-                          <CardDescription>Estimated nutrients per {estimation.portion}</CardDescription>
+                          <CardDescription>Estimated nutrients per {estimation.portion || '100g'}</CardDescription>
                         </div>
                         <Button
                           variant="ghost"
@@ -540,7 +500,7 @@ export default function Home() {
                           <div className="mt-6">
                             <h3 className="font-semibold mb-2 text-lg">Your Total Intake ({consumedGrams}g)</h3>
                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              {finalNutrientItems.map(renderNutrient)}
+                              {finalNutrientItems.map((item) => renderNutrient({ ...item, name: item.name, value: item[item.name.toLowerCase() as keyof FinalNutrients] }))}
                             </div>
                           </div>
                         )}

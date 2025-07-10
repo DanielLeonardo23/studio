@@ -6,14 +6,14 @@
  * - estimateNutrientsFromText - A function that handles the nutrient estimation process from text.
  * - EstimateNutrientsInput - The input type for the estimateNutrients function.
  * - EstimateNutrientsFromTextInput - The input type for the estimateNutrientsFromText function.
- * - EstimateDishOutput - The return type for the estimation functions.
+ * - UnifiedNutritionOutput - The return type for the estimation functions.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {
-  EstimateDishOutput,
-  EstimateDishOutputSchema,
+  UnifiedNutritionOutput,
+  UnifiedNutritionOutputSchema,
 } from './schemas';
 
 const EstimateNutrientsInputSchema = z.object({
@@ -34,33 +34,34 @@ export type EstimateNutrientsFromTextInput = z.infer<
   typeof EstimateNutrientsFromTextInputSchema
 >;
 
-export type {EstimateDishOutput};
+export type {UnifiedNutritionOutput};
 
 export async function estimateNutrients(
   input: EstimateNutrientsInput
-): Promise<EstimateDishOutput> {
+): Promise<UnifiedNutritionOutput> {
   return estimateNutrientsFlow(input);
 }
 
 export async function estimateNutrientsFromText(
   input: EstimateNutrientsFromTextInput
-): Promise<EstimateDishOutput> {
+): Promise<UnifiedNutritionOutput> {
   return estimateNutrientsFromTextFlow(input);
 }
 
 const imagePrompt = ai.definePrompt({
   name: 'estimateDishPrompt',
   input: {schema: EstimateNutrientsInputSchema},
-  output: {schema: EstimateDishOutputSchema},
+  output: {schema: UnifiedNutritionOutputSchema},
   prompt: `Analyze the image of a food dish provided. It is likely a dish from Peruvian cuisine.
 Based on what you see, provide the following information in JSON format:
 1.  **name**: What the dish appears to be.
 2.  The approximate nutritional values per 100g, with these specific keys:
     - **energy**: Calories (in kcal)
     - **protein**: Protein (in g)
-    - **fats**: Fats (in g)
+    - **fats**: Total Fat (in g)
     - **water**: Water (in g)
 
+Do NOT include a 'portion' field in the output. The values should always be for 100g.
 If you are unsure, make a reasonable guess. Prioritize Peruvian dishes if the image is ambiguous.
 Here is the image: {{media url=photoDataUri}}`,
   config: {
@@ -89,7 +90,7 @@ const estimateNutrientsFlow = ai.defineFlow(
   {
     name: 'estimateNutrientsFlow',
     inputSchema: EstimateNutrientsInputSchema,
-    outputSchema: EstimateDishOutputSchema,
+    outputSchema: UnifiedNutritionOutputSchema,
   },
   async input => {
     const {output} = await imagePrompt(input);
@@ -100,16 +101,17 @@ const estimateNutrientsFlow = ai.defineFlow(
 const textPrompt = ai.definePrompt({
   name: 'estimateDishFromTextPrompt',
   input: {schema: EstimateNutrientsFromTextInputSchema},
-  output: {schema: EstimateDishOutputSchema},
+  output: {schema: UnifiedNutritionOutputSchema},
   prompt: `The following is the name of a food dish: {{{dishName}}}. It is very likely a dish from Peruvian cuisine.
 Based on the dish name, provide the following information in JSON format:
 1.  **name**: Confirm the name of the dish.
 2.  The approximate nutritional values per 100g, with these specific keys:
     - **energy**: Calories (in kcal)
     - **protein**: Protein (in g)
-    - **fats**: Fats (in g)
+    - **fats**: Total Fat (in g)
     - **water**: Water (in g)
 
+Do NOT include a 'portion' field in the output. The values should always be for 100g.
 If you are unsure, make a reasonable guess. Prioritize Peruvian dishes if the name is ambiguous. Ensure the 'name' in your response is the dish name I provided.`,
   config: {
     safetySettings: [
@@ -137,7 +139,7 @@ const estimateNutrientsFromTextFlow = ai.defineFlow(
   {
     name: 'estimateNutrientsFromTextFlow',
     inputSchema: EstimateNutrientsFromTextInputSchema,
-    outputSchema: EstimateDishOutputSchema,
+    outputSchema: UnifiedNutritionOutputSchema,
   },
   async input => {
     const {output} = await textPrompt(input);

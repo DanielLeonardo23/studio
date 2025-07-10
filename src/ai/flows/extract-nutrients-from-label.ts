@@ -5,14 +5,14 @@
  *
  * - extractNutrientsFromLabel - A function that handles the nutrient extraction process from a label image.
  * - ExtractNutrientsFromLabelInput - The input type for the function.
- * - EstimateNutrientsOutput - The return type for the function (reusing from schemas).
+ * - UnifiedNutritionOutput - The return type for the function (reusing from schemas).
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {
-  EstimateNutrientsOutput,
-  EstimateNutrientsOutputSchema,
+  UnifiedNutritionOutput,
+  UnifiedNutritionOutputSchema,
 } from './schemas';
 
 const ExtractNutrientsFromLabelInputSchema = z.object({
@@ -27,31 +27,30 @@ export type ExtractNutrientsFromLabelInput = z.infer<
 >;
 
 // Re-exporting for consistency in the calling component
-export type {EstimateNutrientsOutput};
+export type {UnifiedNutritionOutput};
 
 export async function extractNutrientsFromLabel(
   input: ExtractNutrientsFromLabelInput
-): Promise<EstimateNutrientsOutput> {
+): Promise<UnifiedNutritionOutput> {
   return extractNutrientsFromLabelFlow(input);
 }
 
 const labelPrompt = ai.definePrompt({
   name: 'extractNutrientsFromLabelPrompt',
   input: {schema: ExtractNutrientsFromLabelInputSchema},
-  output: {schema: EstimateNutrientsOutputSchema},
+  output: {schema: UnifiedNutritionOutputSchema},
   prompt: `You are an expert at reading nutritional information from images of food labels.
 Analyze the provided image of a nutritional label. From this image, perform OCR and extract the following information.
 
-1.  **alimento**: The name of the food item (e.g., "Leche Gloria Entera").
-2.  **porcion**: The standard portion size. Find the value for "por 100g" or "por 100ml". If it's not available, find the portion size specified (e.g., "30g") and use that. It MUST be a string like "100g" or "30g".
-3.  **nutrientes**: A JSON object with the nutritional values.
-    - **calorias**: The number of calories (Kcal).
-    - **proteinas**: The protein content in grams (g).
-    - **grasas**: The total fat content in grams (g).
-    - **agua**: The water content in grams (g). If water is not listed, estimate it based on the other ingredients or assume it is the remainder to reach 100g. If it cannot be determined, set it to 0.
+1.  **name**: The name of the food item (e.g., "Leche Gloria Entera").
+2.  **portion**: The standard portion size. Find the value for "por 100g", "por 100ml", or a similar serving size. It MUST be a string like "100g", "100ml", or "30g".
+3.  The nutritional values for the specified portion, with these specific keys:
+    - **energy**: The number of calories (Kcal).
+    - **protein**: The protein content in grams (g).
+    - **fats**: The total fat content in grams (g).
+    - **water**: The water content in grams (g). If water is not listed, estimate it based on the other ingredients or assume it is the remainder to reach the portion size. If it cannot be determined, set it to 0.
 
-It is crucial to find the values corresponding to a 100g or 100ml serving. If that column is not available, use the values from the available serving size column but still report the nutrients for that serving.
-
+It is crucial to find the values that correspond to the specified serving size in the 'portion' field.
 Provide the response in the requested JSON format. Do not fail if one value is missing, make a reasonable estimate or use 0.
 
 Here is the image:
@@ -83,7 +82,7 @@ const extractNutrientsFromLabelFlow = ai.defineFlow(
   {
     name: 'extractNutrientsFromLabelFlow',
     inputSchema: ExtractNutrientsFromLabelInputSchema,
-    outputSchema: EstimateNutrientsOutputSchema,
+    outputSchema: UnifiedNutritionOutputSchema,
   },
   async (input) => {
     const {output} = await labelPrompt(input);
