@@ -1,9 +1,7 @@
 'use server';
 /**
  * @fileOverview Extracts nutritional information from an image of a food label.
- * This flow uses a two-step process:
- * 1. It uses the Google Cloud Vision API to perform OCR and extract text from the image.
- * 2. It sends the extracted text to the Gemini model to parse the nutritional information.
+ * This flow sends the image directly to Gemini and asks it to perform OCR and data extraction.
  *
  * - extractNutrientsFromLabel - A function that handles the nutrient extraction process from a label image.
  * - ExtractNutrientsFromLabelInput - The input type for the function.
@@ -16,13 +14,12 @@ import {
   EstimateNutrientsOutput,
   EstimateNutrientsOutputSchema,
 } from './schemas';
-import {ImageAnnotatorClient} from '@google-cloud/vision';
 
 const ExtractNutrientsFromLabelInputSchema = z.object({
   photoDataUri: z
     .string()
     .describe(
-      "A photo of a food nutrition label, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A photo of a food nutrition label, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'"
     ),
 });
 export type ExtractNutrientsFromLabelInput = z.infer<
@@ -38,33 +35,28 @@ export async function extractNutrientsFromLabel(
   return extractNutrientsFromLabelFlow(input);
 }
 
-// Define an internal schema for the text-based prompt that will be sent to Gemini.
-const LabelTextPromptInputSchema = z.object({
-  labelText: z.string().describe("The text extracted from a nutrition label via OCR."),
-});
-
 const labelPrompt = ai.definePrompt({
-  name: 'extractNutrientsFromLabelTextPrompt',
-  input: {schema: LabelTextPromptInputSchema},
+  name: 'extractNutrientsFromLabelPrompt',
+  input: {schema: ExtractNutrientsFromLabelInputSchema},
   output: {schema: EstimateNutrientsOutputSchema},
-  prompt: `You are an expert at reading nutritional information from OCR text.
-Analyze the provided text extracted from a nutritional label and identify the main product name.
-From this text, extract the following information based on a 100g or 100ml serving size. If only a different serving size is available, use it as the 'porcion' but calculate the nutrient values for 100g/ml.
+  prompt: `You are an expert at reading nutritional information from images of food labels.
+Analyze the provided image of a nutritional label. From this image, perform OCR and extract the following information.
 
 1.  **alimento**: The name of the food item (e.g., "Leche Gloria Entera").
-2.  **porcion**: The standard portion size, normalized to "100g" or "100ml".
-3.  **nutrientes**:
-    - **calorias**: The estimated calories.
-    - **proteinas**: The estimated protein content in grams.
-    - **grasas**: The estimated total fat content in grams.
-    - **agua**: The estimated water content in grams. If water is not listed, estimate it based on the other ingredients or assume it is the remainder to reach 100g (e.g., 100 - proteinas - grasas - carbohidratos). Set to 0 if not estimable.
+2.  **porcion**: The standard portion size. Find the value for "por 100g" or "por 100ml". If it's not available, find the portion size specified (e.g., "30g") and use that. It MUST be a string like "100g" or "30g".
+3.  **nutrientes**: A JSON object with the nutritional values.
+    - **calorias**: The number of calories (Kcal).
+    - **proteinas**: The protein content in grams (g).
+    - **grasas**: The total fat content in grams (g).
+    - **agua**: The water content in grams (g). If water is not listed, estimate it based on the other ingredients or assume it is the remainder to reach 100g. If it cannot be determined, set it to 0.
 
-Provide the response in the requested JSON format. If you cannot find a specific value, make a reasonable estimate. Prioritize the values from a "por 100g" or "por 100ml" column if available.
+It is crucial to find the values corresponding to a 100g or 100ml serving. If that column is not available, use the values from the available serving size column but still report the nutrients for that serving.
 
-Here is the extracted text:
----
-{{{labelText}}}
----`,
+Provide the response in the requested JSON format. Do not fail if one value is missing, make a reasonable estimate or use 0.
+
+Here is the image:
+{{media url=photoDataUri}}
+`,
   config: {
     safetySettings: [
       {
@@ -94,25 +86,7 @@ const extractNutrientsFromLabelFlow = ai.defineFlow(
     outputSchema: EstimateNutrientsOutputSchema,
   },
   async (input) => {
-    // This is the correct way to initialize the client within the flow
-    const visionClient = new ImageAnnotatorClient();
-    
-    // 1. Extract text from the image using the Cloud Vision API
-    const imageBuffer = Buffer.from(input.photoDataUri.split(';base64,').pop()!, 'base64');
-    const [result] = await visionClient.textDetection({ image: { content: imageBuffer } });
-    const detections = result.textAnnotations;
-    
-    let extractedText = "";
-    if (detections && detections.length > 0 && detections[0]?.description) {
-      extractedText = detections[0].description;
-    }
-
-    if (!extractedText.trim()) {
-        throw new Error("Could not extract any text from the provided image. Please try a clearer picture.");
-    }
-
-    // 2. Call Gemini with the extracted text to parse it.
-    const {output} = await labelPrompt({ labelText: extractedText });
+    const {output} = await labelPrompt(input);
     return output!;
   }
 );
