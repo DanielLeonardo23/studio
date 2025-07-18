@@ -1,0 +1,26 @@
+
+GLOSARIO CONSOLIDADO DE TÉRMINOS (TDR + Plan de Gestión del Servicio)
+
+SUNAT: Superintendencia Nacional de Aduanas y de Administración Tributaria. Entidad contratante y responsable del proyecto.
+BID: Banco Interamericano de Desarrollo. Financista del proyecto bajo el préstamo N.º 4725/OC-PE.
+UEMSI: Unidad Ejecutora "Mejoramiento del Sistema de Información de la SUNAT", encargada de la ejecución del proyecto.
+TDR: Términos de Referencia. Documento que define el marco técnico, funcional y contractual del servicio a contratar.
+PGS: Plan de Gestión del Servicio. Documento detallado que describe cómo se ejecutará el servicio adjudicado.
+CANVIA: Empresa consultora adjudicataria del contrato. Encargada de ejecutar los bloques del servicio.
+Backlog: Lista priorizada y dinámica de requerimientos funcionales por atender durante la ejecución del servicio.
+Etapa Pre-operativa: Primera fase del servicio (máximo 90 días), orientada a la instalación, capacitación y adecuación del equipo y herramientas.
+Etapa Operativa: Fase principal del servicio (730 días o hasta agotar presupuesto), donde se desarrolla y prueba el software.
+Etapa de Cierre: Fase final del servicio para entrega formal de resultados, documentación y actividades post-implementación.
+Bloques de trabajo: Conjunto de módulos funcionales priorizados por SUNAT. Hay 4 bloques: declaración de renta, infracciones, liquidación centralizada y automatización de solicitudes.
+H/H (Horas/Hombre): Unidad de medida del esfuerzo requerido por parte del equipo técnico (desarrollo y calidad).
+SCRUM: Metodología ágil usada para desarrollar los requerimientos de forma iterativa e incremental.
+PMBOK: Guía de mejores prácticas en gestión de proyectos, utilizada como marco de referencia para el plan.
+CMMI Nivel 3: Modelo de madurez en procesos que garantiza control de calidad y mejora continua en desarrollo de software.
+EDT: Estructura de Desglose de Trabajo. Organización jerárquica de las actividades necesarias del proyecto.
+ANS (SLA): Acuerdo de Nivel de Servicio. Define indicadores, metas, penalidades y estándares mínimos de calidad.
+RACI: Matriz que define los roles de cada actor (Responsable, Aprobador, Consultado, Informado) en cada entregable.
+F2: Formato de definición de requerimientos emitido por SUNAT como insumo inicial para atender un desarrollo.
+Orden de Servicio: Documento emitido por SUNAT que solicita oficialmente la atención de un requerimiento.
+Comité Gerencial: Instancia superior de toma de decisiones entre SUNAT y CANVIA.
+Comité Operativo: Instancia de coordinación técnica y seguimiento del avance del servicio.
+Ambientes no productivos: Infraestructura técnica proporcionada por SUNAT (servidores, bases de datos, etc.) para el desarrollo y pruebas.
